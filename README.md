@@ -1,3 +1,15 @@
+## 思路整理
+- ~~爱因斯坦求和？~~
+- ~~TranAD没有使用mask~~
+- ~~Anomaly里面没有Decoder~~
+- 把FOD转成适合1D的
+- FOD和AT在测试阶段判断方法不一样：FOD好像没有判断是否异常，只有异常概率
+- FOD相似度和AT对应关系，FODloss1 2和AT一样吗
+- 把FOD相减改成注意力机制
+- 每层更新ref_feat
+- Inter——Corr Q改成自己
+
+
 # Anomaly-Transformer (ICLR 2022 Spotlight)
 Anomaly Transformer: Time Series Anomaly Detection with Association Discrepancy
 
@@ -50,3 +62,5 @@ url={https://openreview.net/forum?id=LzQQ89U1qm_}
 
 ## Contact
 If you have any question, please contact wuhx23@mails.tsinghua.edu.cn.
+
+
