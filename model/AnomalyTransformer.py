@@ -83,7 +83,8 @@ class EncoderLayer(nn.Module):
         y = rearrange(y, "b d n -> b n d")  # (n_samples, n_patches, hidden_dim)
         y = self.mixer_block(y)  # (n_samples, n_patches, hidden_dim)
         y = rearrange(y, "b n d -> b d n")  # (n_samples, hidden_dim, n_patches)
-        y = self.conv(y)
+        y = self.conv(y)  # B, D, L
+        y = rearrange(y, "b d n -> b n d")  # B, L, D
 
         return self.norm2(x + y), attn, mask, sigma
 
