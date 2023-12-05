@@ -1,4 +1,3 @@
-import einops
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -79,6 +78,7 @@ class EncoderLayer(nn.Module):
         # y = self.dropout(self.conv2(y).transpose(-1, 1))
 
         # patch
+        y = rearrange(y, "b n d -> b d n")  # B, D, L
         y = self.patch_embedding(y)  # (n_samples, hidden_dim, n_patches)
         y = rearrange(y, "b d n -> b n d")  # (n_samples, n_patches, hidden_dim)
         y = self.mixer_block(y)  # (n_samples, n_patches, hidden_dim)
