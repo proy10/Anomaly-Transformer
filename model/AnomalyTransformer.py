@@ -4,6 +4,7 @@ import torch.nn.functional as F
 
 from .attn import AnomalyAttention, AttentionLayer
 from .embed import DataEmbedding, TokenEmbedding
+from .RevIN import RevIN
 from einops import rearrange
 
 
@@ -40,7 +41,7 @@ class MixerBlock(nn.Module):
 
 
 class EncoderLayer(nn.Module):
-    def __init__(self, attention, d_model, d_ff=None, series_length=None, patch_size=1, d_channel=None, d_token=None, dropout=0.1, activation="relu"):
+    def __init__(self, attention, d_model, d_ff=None, series_length=None, patch_size=1, d_channel=2048, d_token=256, dropout=0.1, activation="relu"):
         super(EncoderLayer, self).__init__()
         d_ff = d_ff or 4 * d_model
         self.attention = attention
@@ -61,7 +62,8 @@ class EncoderLayer(nn.Module):
             hidden_dim=d_ff,
             dropout=dropout
         )
-        self.conv = nn.Conv1d(in_channels=num_patches, out_channels=d_model, kernel_size=1)
+        self.conv1 = nn.Conv1d(in_channels=num_patches, out_channels=series_length, kernel_size=1)
+        self.conv2 = nn.Conv1d(in_channels=d_ff, out_channels=d_model, kernel_size=1)
         self.norm1 = nn.LayerNorm(d_model)
         self.norm2 = nn.LayerNorm(d_model)
         self.dropout = nn.Dropout(dropout)
@@ -74,6 +76,7 @@ class EncoderLayer(nn.Module):
         )
         x = x + self.dropout(new_x)
         y = x = self.norm1(x)  # B, L, D
+        # print(x.shape)
         # y = self.dropout(self.activation(self.conv1(y.transpose(-1, 1))))
         # y = self.dropout(self.conv2(y).transpose(-1, 1))
 
@@ -82,9 +85,11 @@ class EncoderLayer(nn.Module):
         y = self.patch_embedding(y)  # (n_samples, hidden_dim, n_patches)
         y = rearrange(y, "b d n -> b n d")  # (n_samples, n_patches, hidden_dim)
         y = self.mixer_block(y)  # (n_samples, n_patches, hidden_dim)
-        y = rearrange(y, "b n d -> b d n")  # (n_samples, hidden_dim, n_patches)
-        y = self.conv(y)  # B, D, L
+        y = self.conv1(y)  # B, L, D
+        y = rearrange(y, "b d n -> b n d")  # B, D, L
+        y = self.conv2(y)  # B, D, L
         y = rearrange(y, "b d n -> b n d")  # B, L, D
+        y = self.dropout(y)
 
         return self.norm2(x + y), attn, mask, sigma
 
@@ -114,7 +119,7 @@ class Encoder(nn.Module):
 
 class AnomalyTransformer(nn.Module):
     def __init__(self, win_size, enc_in, c_out, d_model=512, n_heads=8, e_layers=3, d_ff=512,
-                 dropout=0.0, activation='gelu', output_attention=True):
+                 dropout=0.0, activation='gelu', output_attention=True, use_RevIN=False):
         super(AnomalyTransformer, self).__init__()
         self.output_attention = output_attention
 
@@ -130,6 +135,8 @@ class AnomalyTransformer(nn.Module):
                         d_model, n_heads),
                     d_model,
                     d_ff,
+                    series_length=win_size,
+                    patch_size=10,
                     dropout=dropout,
                     activation=activation
                 ) for l in range(e_layers)
@@ -139,10 +146,20 @@ class AnomalyTransformer(nn.Module):
 
         self.projection = nn.Linear(d_model, c_out, bias=True)
 
+        self.use_RevIN = use_RevIN
+        if use_RevIN:
+            self.revin_layer = RevIN(enc_in)
+
     def forward(self, x):
+        if self.use_RevIN:
+            x = self.revin_layer(x, 'norm')
+        
         enc_out = self.embedding(x)
         enc_out, series, prior, sigmas = self.encoder(enc_out)
         enc_out = self.projection(enc_out)
+
+        if self.use_RevIN:
+            enc_out = self.revin_layer(enc_out, 'denorm')
 
         if self.output_attention:
             return enc_out, series, prior, sigmas

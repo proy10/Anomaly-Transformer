@@ -87,7 +87,7 @@ class Solver(object):
         self.criterion = nn.MSELoss()
 
     def build_model(self):
-        self.model = AnomalyTransformer(win_size=self.win_size, enc_in=self.input_c, c_out=self.output_c, e_layers=3)
+        self.model = AnomalyTransformer(win_size=self.win_size, enc_in=self.input_c, c_out=self.output_c, e_layers=3, use_RevIN=self.use_revin)
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
 
         if torch.cuda.is_available():
@@ -100,7 +100,7 @@ class Solver(object):
         loss_2 = []
         for i, (input_data, _) in enumerate(vali_loader):
             input = input_data.float().to(self.device)
-            output, series, prior, _, ref_series, ref_prior = self.model(input)
+            output, series, prior, _ = self.model(input)
             series_loss = 0.0
             prior_loss = 0.0
             for u in range(len(prior)):
@@ -150,13 +150,11 @@ class Solver(object):
                 iter_count += 1
                 input = input_data.float().to(self.device)
 
-                output, series, prior, _, ref_series, ref_prior = self.model(input)
+                output, series, prior, _ = self.model(input)
 
                 # calculate Association discrepancy
                 series_loss = 0.0
                 prior_loss = 0.0
-                ref_series_loss = 0.0
-                ref_prior_loss = 0.0
                 for u in range(len(prior)):
                     series_loss += (torch.mean(my_kl_loss(series[u], (
                             prior[u] / torch.unsqueeze(torch.sum(prior[u], dim=-1), dim=-1).repeat(1, 1, 1,
@@ -171,30 +169,14 @@ class Solver(object):
                         my_kl_loss(series[u].detach(), (
                                 prior[u] / torch.unsqueeze(torch.sum(prior[u], dim=-1), dim=-1).repeat(1, 1, 1,
                                                                                                        self.win_size)))))
-
-                    ref_series_loss += (torch.mean(my_kl_loss(ref_series[u], (
-                            ref_prior[u] / torch.unsqueeze(torch.sum(prior[u], dim=-1), dim=-1).repeat(1, 1, 1,
-                                                                                                   self.win_size)).detach())) + torch.mean(
-                        my_kl_loss((ref_prior[u] / torch.unsqueeze(torch.sum(prior[u], dim=-1), dim=-1).repeat(1, 1, 1,
-                                                                                                           self.win_size)).detach(),
-                                   ref_series[u])))
-                    ref_prior_loss += (torch.mean(my_kl_loss(
-                        (ref_prior[u] / torch.unsqueeze(torch.sum(prior[u], dim=-1), dim=-1).repeat(1, 1, 1,
-                                                                                                self.win_size)),
-                        ref_series[u].detach())) + torch.mean(
-                        my_kl_loss(ref_series[u].detach(), (
-                                ref_prior[u] / torch.unsqueeze(torch.sum(prior[u], dim=-1), dim=-1).repeat(1, 1, 1,
-                                                                                                       self.win_size)))))
                 series_loss = series_loss / len(prior)
                 prior_loss = prior_loss / len(prior)
-                ref_series_loss = ref_series_loss / len(prior)
-                ref_prior_loss = ref_prior_loss / len(prior)
 
                 rec_loss = self.criterion(output, input)
 
                 loss1_list.append((rec_loss - self.k * series_loss).item())
-                loss1 = rec_loss - self.k * series_loss - self.k * ref_series_loss
-                loss2 = rec_loss + self.k * prior_loss + self.k * ref_prior_loss
+                loss1 = rec_loss - self.k * series_loss
+                loss2 = rec_loss + self.k * prior_loss
 
                 if (i + 1) % 100 == 0:
                     speed = (time.time() - time_now) / iter_count
@@ -391,3 +373,4 @@ class Solver(object):
                 recall, f_score))
 
         return accuracy, precision, recall, f_score
+        
