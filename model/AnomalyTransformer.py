@@ -41,7 +41,7 @@ class MixerBlock(nn.Module):
 
 
 class EncoderLayer(nn.Module):
-    def __init__(self, attention, d_model, d_ff=None, series_length=None, patch_size=1, d_channel=2048, d_token=256, dropout=0.1, activation="relu"):
+    def __init__(self, attention, d_model, d_ff=None, series_length=None, patch_size=1, d_channel=2048, d_token=256, dropout=0.1, activation="gelu"):
         super(EncoderLayer, self).__init__()
         d_ff = d_ff or 4 * d_model
         self.attention = attention
@@ -127,6 +127,7 @@ class AnomalyTransformer(nn.Module):
                  dropout=0.0, activation='gelu', output_attention=True, use_RevIN=False):
         super(AnomalyTransformer, self).__init__()
         self.output_attention = output_attention
+        patch_size_list = [20, 10, 5]
 
         # Encoding
         self.embedding = DataEmbedding(enc_in, d_model, dropout)
@@ -141,7 +142,7 @@ class AnomalyTransformer(nn.Module):
                     d_model,
                     d_ff,
                     series_length=win_size,
-                    patch_size=10,
+                    patch_size=patch_size_list[l],
                     dropout=dropout,
                     activation=activation
                 ) for l in range(e_layers)
