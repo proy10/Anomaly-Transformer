@@ -32,10 +32,10 @@ class MixerBlock(nn.Module):
 
     def forward(self, x):
         y = self.norm1(x)  # (n_samples, n_patches, hidden_dim)
-        y = rearrange(y, 'b n d -> b d n')  # (n_samples, hidden_dim, n_patches)
-        y = self.mlp_block_token(y)  # (n_samples, hidden_dim, n_patches)
-        y = rearrange(y, 'b d n -> b n d')  # (n_samples, n_patches, hidden_dim)
-        x = x + y  # (n_samples, n_patches, hidden_dim)
+        # y = rearrange(y, 'b n d -> b d n')  # (n_samples, hidden_dim, n_patches)
+        y = self.mlp_block_token(y.transpose(-1, 1))  # (n_samples, hidden_dim, n_patches)
+        # y = rearrange(y, 'b d n -> b n d')  # (n_samples, n_patches, hidden_dim)
+        x = x + y.transpose(-1, 1)  # (n_samples, n_patches, hidden_dim)
         y = self.mlp_block_chnl(self.norm2(x))  # (n_samples, n_patches, hidden_dim)
         return x + y
 
@@ -76,20 +76,25 @@ class EncoderLayer(nn.Module):
         )
         x = x + self.dropout(new_x)
         y = x = self.norm1(x)  # B, L, D
-        # print(x.shape)
         # y = self.dropout(self.activation(self.conv1(y.transpose(-1, 1))))
         # y = self.dropout(self.conv2(y).transpose(-1, 1))
 
         # patch
-        y = rearrange(y, "b n d -> b d n")  # B, D, L
-        y = self.patch_embedding(y)  # (n_samples, hidden_dim, n_patches)
-        y = rearrange(y, "b d n -> b n d")  # (n_samples, n_patches, hidden_dim)
-        y = self.mixer_block(y)  # (n_samples, n_patches, hidden_dim)
-        y = self.conv1(y)  # B, L, D
-        y = rearrange(y, "b d n -> b n d")  # B, D, L
-        y = self.conv2(y)  # B, D, L
-        y = rearrange(y, "b d n -> b n d")  # B, L, D
-        y = self.dropout(y)
+        # y = rearrange(y, "b n d -> b d n")  # B, D, L
+        # y = self.patch_embedding(y)  # (n_samples, hidden_dim, n_patches)
+        # y = rearrange(y, "b d n -> b n d")  # (n_samples, n_patches, hidden_dim)
+        # y = self.mixer_block(y)  # (n_samples, n_patches, hidden_dim)
+        # y = self.conv1(y)  # B, L, D
+        # y = rearrange(y, "b d n -> b n d")  # B, D, L
+        # y = self.conv2(y)  # B, D, L
+        # y = rearrange(y, "b d n -> b n d")  # B, L, D
+        # y = self.dropout(y)
+
+        ### Above is simplified as following
+        y = self.patch_embedding(y.transpose(-1, 1))  # (n_samples, hidden_dim, n_patches)
+        y = self.dropout(self.mixer_block(y.transpose(-1, 1)))  # (n_samples, n_patches, hidden_dim)
+        y = self.dropout(self.activation(self.conv1(y).transpose(-1, 1)))  # B, hidden_dim, L
+        y = self.dropout(self.conv2(y).transpose(-1, 1))  # B, L, D
 
         return self.norm2(x + y), attn, mask, sigma
 
