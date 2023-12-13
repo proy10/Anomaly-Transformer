@@ -41,7 +41,7 @@ if __name__ == '__main__':
     parser.add_argument('--data_path', type=str, default='./dataset/creditcard_ts.csv')
     parser.add_argument('--model_save_path', type=str, default='checkpoints')
     parser.add_argument('--anormly_ratio', type=float, default=4.00)
-    parser.add_argument('--use_revin', type=bool, default=False)
+    parser.add_argument('--use_revin', action='store_true', dest='use_revin', default=False)
 
     config = parser.parse_args()
 

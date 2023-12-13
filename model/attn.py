@@ -60,9 +60,37 @@ class AnomalyAttention(nn.Module):
             return (V.contiguous(), None)
 
 
+class Attention(nn.Module):
+    def __init__(self, mask_flag=True, scale=None, attention_dropout=0.0, output_attention=False):
+        super(Attention, self).__init__()
+        self.scale = scale
+        self.mask_flag = mask_flag
+        self.output_attention = output_attention
+        self.dropout = nn.Dropout(attention_dropout)
+
+    def forward(self, queries, keys, values, attn_mask):
+        B, L, H, E = queries.shape
+        _, S, _, D = values.shape
+        scale = self.scale or 1. / sqrt(E)
+
+        scores = torch.einsum("blhe,bshe->bhls", queries, keys)
+        if self.mask_flag:
+            if attn_mask is None:
+                attn_mask = TriangularCausalMask(B, L, device=queries.device)
+            scores.masked_fill_(attn_mask.mask, -np.inf)
+        attn = scale * scores
+        series = self.dropout(torch.softmax(attn, dim=-1))
+        V = torch.einsum("bhls,bshd->blhd", series, values)
+
+        if self.output_attention:
+            return V.contiguous(), series
+        else:
+            return V.contiguous()
+
+
 class AttentionLayer(nn.Module):
     def __init__(self, attention, d_model, n_heads, d_keys=None,
-                 d_values=None):
+                 d_values=None, anomaly_attention=True):
         super(AttentionLayer, self).__init__()
 
         d_keys = d_keys or (d_model // n_heads)
@@ -75,8 +103,12 @@ class AttentionLayer(nn.Module):
                                         d_keys * n_heads)
         self.value_projection = nn.Linear(d_model,
                                           d_values * n_heads)
-        self.sigma_projection = nn.Linear(d_model,
-                                          n_heads)
+
+        self.anomaly_attention = anomaly_attention
+        if self.anomaly_attention:
+            self.sigma_projection = nn.Linear(d_model,
+                                            n_heads)
+
         self.out_projection = nn.Linear(d_values * n_heads, d_model)
 
         self.n_heads = n_heads
@@ -89,15 +121,28 @@ class AttentionLayer(nn.Module):
         queries = self.query_projection(queries).view(B, L, H, -1)
         keys = self.key_projection(keys).view(B, S, H, -1)
         values = self.value_projection(values).view(B, S, H, -1)
-        sigma = self.sigma_projection(x).view(B, L, H)
 
-        out, series, prior, sigma = self.inner_attention(
-            queries,
-            keys,
-            values,
-            sigma,
-            attn_mask
-        )
+        if self.anomaly_attention:
+            sigma = self.sigma_projection(x).view(B, L, H)
+
+            out, series, prior, sigma = self.inner_attention(
+                queries,
+                keys,
+                values,
+                sigma,
+                attn_mask
+            )
+        else:
+            out = self.inner_attention(
+                queries,
+                keys,
+                values,
+                attn_mask
+            )
+
         out = out.view(B, L, -1)
 
-        return self.out_projection(out), series, prior, sigma
+        if self.anomaly_attention:
+            return self.out_projection(out), series, prior, sigma
+        else:
+            return self.out_projection(out)
