@@ -71,7 +71,8 @@ class EncoderLayer(nn.Module):
         # self.conv1 = nn.Conv1d(in_channels=num_patches, out_channels=series_length, kernel_size=1)
         # self.conv2 = nn.Conv1d(in_channels=d_ff, out_channels=d_model, kernel_size=1)
         # self.fn1 = nn.Linear(in_features=num_patches, out_features=series_length)
-        self.rev_patch = nn.Conv1d(in_channels=num_patches, out_channels=series_length, kernel_size=1)
+        # self.rev_patch = nn.Conv1d(in_channels=num_patches, out_channels=series_length, kernel_size=1)
+        self.rev_patch = nn.ConvTranspose1d(in_channels=d_model, out_channels=d_model, kernel_size=patch_size, stride=patch_size)
         # self.fn1 = nn.Linear(in_features=d_model, out_features=d_ff)
         # self.fn2 = nn.Linear(in_features=d_ff, out_features=d_model)
         self.norm1 = nn.LayerNorm(d_model)
@@ -93,39 +94,27 @@ class EncoderLayer(nn.Module):
         # y = self.dropout(self.conv2(y).transpose(-1, 1))
 
         # patch
-        # y = rearrange(y, "b n d -> b d n")  # B, D, L
-        # y = self.patch_embedding(y)  # (n_samples, hidden_dim, n_patches)
-        # Mixer
-        # y = rearrange(y, "b d n -> b n d")  # (n_samples, n_patches, hidden_dim)
-        # y = self.mixer_block(y)  # (n_samples, n_patches, hidden_dim)
-        # y = self.conv1(y)  # B, L, D
-        # y = rearrange(y, "b d n -> b n d")  # B, D, L
-        # y = self.conv2(y)  # B, D, L
-        # y = rearrange(y, "b d n -> b n d")  # B, L, D
-        # y = self.dropout(y)
-
-        ### Above is simplified as following
         y = self.patch_embedding(y.transpose(-1, 1))  # B, D, P
         y = y.transpose(-1, 1)  # B, P, D
-
         new_y = self.patch_attention(
             y, y, y,
-            attn_mask=attn_mask
+            attn_mask=True
         )
         y = y + self.dropout(new_y)
         y = self.norm2(y)
-        y = self.dropout(self.rev_patch(y))  # B, L, D
 
-        y = x = self.norm2(x + y)
+        y = self.dropout(self.rev_patch(y.transpose(-1, 1)))  # B, D, L
+        # y = x = self.norm2(x + y)
 
         # patch + mixer
         # y = self.dropout(self.mixer_block(y.transpose(-1, 1)))  # (n_samples, n_patches, hidden_dim)
         # y = self.dropout(self.activation(self.conv1(y).transpose(-1, 1)))  # B, hidden_dim, L
         # y = self.dropout(self.conv2(y).transpose(-1, 1))  # B, L, D
-
         # y = self.dropout(self.mixer_block(self.fn1(y)))  # B, L, H
         # y = self.dropout(self.fn2(y))  # B, L, D
-        y = self.dropout(self.mixer_block(y))  # B, L, D
+
+        # mixer
+        y = self.dropout(self.mixer_block(y.transpose(-1, 1)))  # B, L, D
 
         return self.norm3(x + y), attn, mask, sigma
 
@@ -155,7 +144,7 @@ class Encoder(nn.Module):
 
 class AnomalyTransformer(nn.Module):
     def __init__(self, win_size, enc_in, c_out, d_model=512, n_heads=8, e_layers=3, d_ff=512,
-                 dropout=0.0, activation='gelu', output_attention=True, use_RevIN=False):
+                 dropout=0.0, activation='gelu', output_attention=True, use_revin=False):
         super(AnomalyTransformer, self).__init__()
         self.enc_in = enc_in
         self.output_attention = output_attention
@@ -175,8 +164,8 @@ class AnomalyTransformer(nn.Module):
                     d_ff,
                     series_length=win_size,
                     patch_size=patch_size_list[l],
-                    d_channel=2048,
-                    d_token=256,
+                    d_channel=1024,
+                    d_token=512,
                     dropout=dropout,
                     activation=activation
                 ) for l in range(e_layers)
@@ -186,19 +175,19 @@ class AnomalyTransformer(nn.Module):
 
         self.projection = nn.Linear(d_model, c_out, bias=True)
 
-        self.use_RevIN = use_RevIN
-        if self.use_RevIN:
+        self.use_revin = use_revin
+        if self.use_revin:
             self.revin_layer = RevIN(enc_in)
 
     def forward(self, x):
-        if self.use_RevIN:
+        if self.use_revin:
             x = self.revin_layer(x, 'norm')
         
         enc_out = self.embedding(x)
         enc_out, series, prior, sigmas = self.encoder(enc_out)
         enc_out = self.projection(enc_out)
 
-        if self.use_RevIN:
+        if self.use_revin:
             enc_out = self.revin_layer(enc_out, 'denorm')
 
         if self.output_attention:
