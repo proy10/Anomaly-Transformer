@@ -71,16 +71,16 @@ class Solver(object):
 
         self.train_loader = get_loader_segment(self.data_path, batch_size=self.batch_size, win_size=self.win_size,
                                                mode='train',
-                                               dataset=self.dataset)
+                                               dataset=self.dataset, index=self.index)
         self.vali_loader = get_loader_segment(self.data_path, batch_size=self.batch_size, win_size=self.win_size,
                                               mode='val',
-                                              dataset=self.dataset)
+                                              dataset=self.dataset, index=self.index)
         self.test_loader = get_loader_segment(self.data_path, batch_size=self.batch_size, win_size=self.win_size,
                                               mode='test',
-                                              dataset=self.dataset)
+                                              dataset=self.dataset, index=self.index)
         self.thre_loader = get_loader_segment(self.data_path, batch_size=self.batch_size, win_size=self.win_size,
                                               mode='thre',
-                                              dataset=self.dataset)
+                                              dataset=self.dataset, index=self.index)
 
         self.build_model()
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -135,7 +135,7 @@ class Solver(object):
         path = self.model_save_path
         if not os.path.exists(path):
             os.makedirs(path)
-        early_stopping = EarlyStopping(patience=3, verbose=True, dataset_name=self.dataset)
+        early_stopping = EarlyStopping(patience=50, verbose=True, dataset_name=self.dataset)
         train_steps = len(self.train_loader)
 
         for epoch in range(self.num_epochs):
@@ -371,6 +371,12 @@ class Solver(object):
             "Accuracy : {:0.4f}, Precision : {:0.4f}, Recall : {:0.4f}, F-score : {:0.4f} ".format(
                 accuracy, precision,
                 recall, f_score))
+
+        # file = "results.txt"
+        # with open(file, 'a') as f:
+        #     f.write("Accuracy : {:0.4f}, Precision : {:0.4f}, Recall : {:0.4f}, F-score : {:0.4f} ".format(
+        #         accuracy, precision,
+        #         recall, f_score) + '\n')
 
         return accuracy, precision, recall, f_score
         

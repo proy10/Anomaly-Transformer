@@ -11,6 +11,12 @@ def str2bool(v):
     return v.lower() in ('true')
 
 
+def find_nearest(array, value):
+    array = np.asarray(array)
+    idx = (np.abs(array - value)).argmin()
+    return int(array[idx-1])
+
+
 def main(config):
     cudnn.benchmark = True
     if (not os.path.exists(config.model_save_path)):
@@ -42,8 +48,18 @@ if __name__ == '__main__':
     parser.add_argument('--model_save_path', type=str, default='checkpoints')
     parser.add_argument('--anormly_ratio', type=float, default=4.00)
     parser.add_argument('--use_revin', action='store_true', dest='use_revin', default=False)
+    parser.add_argument('--index', type=int, default=137)
 
     config = parser.parse_args()
+
+    if config.dataset == 'UCR':
+        batch_size_buffer = [2,4,8,16,32,64,128,256]
+        data_len = np.load(config.data_path + "/UCR_"+str(config.index)+"_train.npy").shape[0] 
+        config.batch_size = find_nearest(batch_size_buffer, data_len / config.win_size)
+    elif config.dataset == 'UCR_AUG':
+        batch_size_buffer = [2,4,8,16,32,64,128,256]
+        data_len = np.load(config.data_path + "/UCR_AUG_"+str(config.index)+"_train.npy").shape[0] 
+        config.batch_size = find_nearest(batch_size_buffer, data_len / config.win_size)
 
     args = vars(config)
     print('------------ Options -------------')

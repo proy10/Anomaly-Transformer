@@ -339,7 +339,7 @@ class NIPS_TS_SwanSegLoader(object):
                 self.test_labels[index // self.step * self.win_size:index // self.step * self.win_size + self.win_size]) 
 
 
-def get_loader_segment(data_path, batch_size, win_size=100, step=100, mode='train', dataset='KDD'):
+def get_loader_segment(data_path, batch_size, win_size=100, step=100, mode='train', dataset='KDD', index=None):
     if (dataset == 'SMD'):
         dataset = SMDSegLoader(data_path, win_size, step, mode)
     elif (dataset == 'MSL'):
@@ -350,8 +350,8 @@ def get_loader_segment(data_path, batch_size, win_size=100, step=100, mode='trai
         dataset = PSMSegLoader(data_path, win_size, 1, mode)
     elif (dataset == 'SWAT'):
         dataset = SWATSegLoader(data_path, win_size, 1, mode)
-    # elif (dataset == 'UCR_AUG'):
-    #     dataset = UCRAUGSegLoader(index, data_path, win_size, 1, mode)
+    elif (dataset == 'UCR_AUG'):
+        dataset = UCRAUGSegLoader(index, data_path, win_size, 1, mode)
     elif (dataset == 'NIPS_TS_Swan'):
         dataset = NIPS_TS_SwanSegLoader(data_path, win_size, 1, mode)
 
